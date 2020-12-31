@@ -1,4 +1,4 @@
-use crate::cni::{get_request, CniRequest};
+use crate::cni::{get_request, CniRequest, CniResponse, Interface, IpResponse, Route};
 use anyhow::Result;
 use log::info;
 use log::LevelFilter;
@@ -7,6 +7,7 @@ use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::filter::threshold::ThresholdFilter;
+use serde_json::{Map, Value};
 use std::env::join_paths;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
@@ -22,23 +23,38 @@ fn main() -> Result<()> {
 
     info!("Handling request: {:?}", req);
 
-    exec_cni_command(req.config.ifname.as_str(), &req)?;
+    let mut interfaces: Vec<Interface> = Vec::new();
+    let mut ips: Vec<IpResponse> = Vec::new();
+    let mut routes: Vec<Route> = Vec::new();
+    for (ifname, config) in req.config.plugins.clone() {
+        let resp = exec_cni_command(ifname.as_str(), config, &req)?;
 
-    //
-    // for (interface, conf) in req.config.interfaces {
-    //     exec_cni_command(conf.as_str(), interface.as_str(), &req);
-    // }
+        interfaces.extend(resp.interfaces);
+        ips.extend(resp.ips);
+        routes.extend(resp.routes);
+    }
+
+    let resp = CniResponse {
+        cni_version: String::from("0.4.0"),
+        interfaces,
+        ips,
+        routes,
+    };
+
+    println!("{}", serde_json::to_string(&resp)?);
 
     Ok(())
 }
 
-fn exec_cni_command(ifname: &str, src_req: &CniRequest) -> Result<()> {
+fn exec_cni_command(
+    ifname: &str,
+    config: Map<String, Value>,
+    src_req: &CniRequest,
+) -> Result<CniResponse> {
     let mut path = PathBuf::new();
 
     path.push(src_req.path.as_str());
-    let subtype = src_req
-        .config
-        .config
+    let subtype = config
         .get("type")
         .expect("No plugin type!")
         .as_str()
@@ -59,7 +75,7 @@ fn exec_cni_command(ifname: &str, src_req: &CniRequest) -> Result<()> {
     let stdin = handle.stdin.as_mut().expect("Could not open child stdin");
 
     // Write the sub-config
-    let mut subconf = src_req.config.config.clone();
+    let mut subconf = config.clone();
     subconf.insert(
         String::from("name"),
         serde_json::value::Value::String(src_req.config.name.clone()),
@@ -70,15 +86,25 @@ fn exec_cni_command(ifname: &str, src_req: &CniRequest) -> Result<()> {
         serde_json::value::Value::String(src_req.config.cni_version.clone()),
     );
 
-    stdin.write_all(serde_json::to_string(&subconf)?.as_bytes())?;
+    let subreq = serde_json::to_string(&subconf)?;
+    info!("Sending sub req: {}", subreq.as_str());
+
+    stdin.write_all(subreq.as_bytes())?;
 
     let output = handle.wait_with_output()?;
+
     let raw_output = String::from_utf8(output.stdout)?;
+    if !output.status.success() {
+        println!("{}", raw_output);
+        anyhow::bail!("Error in plugin");
+    }
 
-    info!("Got output: {}", raw_output);
+    info!("Got raw output: {:?}", raw_output);
 
-    println!("{}", raw_output);
-    Ok(())
+    let resp: CniResponse = serde_json::from_str(raw_output.as_str())?;
+    info!("Got output: {:?}", resp);
+
+    Ok(resp)
 }
 
 fn init_logging() {

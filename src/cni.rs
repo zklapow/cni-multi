@@ -2,9 +2,11 @@ use anyhow::{anyhow, Error, Result};
 use cidr::{Cidr, Ipv4Cidr, Ipv4Inet};
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 use std::io;
 
 use log::info;
+use std::net::Ipv4Addr;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CniConfig {
@@ -13,10 +15,7 @@ pub struct CniConfig {
     #[serde(rename = "type")]
     pub plugin_type: String,
     pub name: String,
-    pub ifname: String,
-    pub config: Map<String, Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ipam: Option<ConsulIpamConfig>,
+    pub plugins: BTreeMap<String, Map<String, Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dns: Option<DnsConfig>,
 }
@@ -66,8 +65,7 @@ pub struct IpamResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IpResponse {
     pub version: String,
-    #[serde(serialize_with = "serialize_host_ip")]
-    pub address: Ipv4Cidr,
+    pub address: Ipv4Inet,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gateway: Option<Ipv4Inet>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,6 +77,23 @@ pub struct Route {
     pub dst: Ipv4Cidr,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gw: Option<Ipv4Inet>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Interface {
+    pub name: String,
+    pub mac: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CniResponse {
+    #[serde(rename = "cniVersion")]
+    pub cni_version: String,
+    pub interfaces: Vec<Interface>,
+    pub ips: Vec<IpResponse>,
+    pub routes: Vec<Route>,
 }
 
 impl IpamResponse {
