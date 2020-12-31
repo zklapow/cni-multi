@@ -27,11 +27,11 @@ fn main() -> Result<()> {
     let mut ips: Vec<IpResponse> = Vec::new();
     let mut routes: Vec<Route> = Vec::new();
     for (ifname, config) in req.config.plugins.clone() {
-        let resp = exec_cni_command(ifname.as_str(), config, &req)?;
-
-        interfaces.extend(resp.interfaces);
-        ips.extend(resp.ips);
-        routes.extend(resp.routes);
+        if let Some(resp) = exec_cni_command(ifname.as_str(), config, &req)? {
+            interfaces.extend(resp.interfaces);
+            ips.extend(resp.ips);
+            routes.extend(resp.routes);
+        }
     }
 
     let resp = CniResponse {
@@ -50,7 +50,7 @@ fn exec_cni_command(
     ifname: &str,
     config: Map<String, Value>,
     src_req: &CniRequest,
-) -> Result<CniResponse> {
+) -> Result<Option<CniResponse>> {
     let mut path = PathBuf::new();
 
     path.push(src_req.path.as_str());
@@ -93,6 +93,11 @@ fn exec_cni_command(
 
     let output = handle.wait_with_output()?;
 
+    // For deletes, jsut pretend all is well!
+    if src_req.command == "DEL" {
+        return Ok(None);
+    }
+
     let raw_output = String::from_utf8(output.stdout)?;
     if !output.status.success() {
         println!("{}", raw_output);
@@ -104,7 +109,7 @@ fn exec_cni_command(
     let resp: CniResponse = serde_json::from_str(raw_output.as_str())?;
     info!("Got output: {:?}", resp);
 
-    Ok(resp)
+    Ok(Some(resp))
 }
 
 fn init_logging() {
