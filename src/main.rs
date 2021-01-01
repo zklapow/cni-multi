@@ -29,7 +29,9 @@ fn main() -> Result<()> {
     for (ifname, config) in req.config.plugins.clone() {
         if let Some(resp) = exec_cni_command(ifname.as_str(), config, &req)? {
             interfaces.extend(resp.interfaces);
-            ips.extend(resp.ips);
+            if req.config.filter.contains(&ifname) {
+                ips.extend(resp.ips);
+            }
             routes.extend(resp.routes);
         }
     }
@@ -40,6 +42,8 @@ fn main() -> Result<()> {
         ips,
         routes,
     };
+
+    info!("Sending resp {:?}", resp);
 
     println!("{}", serde_json::to_string(&resp)?);
 

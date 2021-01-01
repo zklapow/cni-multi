@@ -15,6 +15,7 @@ pub struct CniConfig {
     #[serde(rename = "type")]
     pub plugin_type: String,
     pub name: String,
+    pub filter: Vec<String>,
     pub plugins: BTreeMap<String, Map<String, Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dns: Option<DnsConfig>,
