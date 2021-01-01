@@ -36,6 +36,11 @@ fn main() -> Result<()> {
         }
     }
 
+    if req.command == "DEL" {
+        info!("Not sending response to DEL");
+        return Ok(());
+    }
+
     let resp = CniResponse {
         cni_version: String::from("0.4.0"),
         interfaces,
