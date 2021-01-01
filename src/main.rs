@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     for (ifname, config) in req.config.plugins.clone() {
         if let Some(resp) = exec_cni_command(ifname.as_str(), config, &req)? {
             interfaces.extend(resp.interfaces);
-            if req.config.filter.contains(&ifname) {
+            if !req.config.filter.contains(&ifname) {
                 ips.extend(resp.ips);
             }
             routes.extend(resp.routes);
