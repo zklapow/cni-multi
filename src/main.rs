@@ -28,8 +28,9 @@ fn main() -> Result<()> {
     let mut routes: Vec<Route> = Vec::new();
     for (ifname, config) in req.config.plugins.clone() {
         if let Some(resp) = exec_cni_command(ifname.as_str(), config, &req)? {
-            interfaces.extend(resp.interfaces);
+            // TODO: this is a horrible hack, really there should be a better way
             if !req.config.filter.contains(&ifname) {
+                interfaces.extend(resp.interfaces);
                 ips.extend(resp.ips);
             }
             routes.extend(resp.routes);
